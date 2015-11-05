@@ -25,22 +25,23 @@ def get_wad_textures(wad, ignore = None):
     for t in txd:
         if (ignore is not None):
             if t not in igtx:
-                output[t] = make_texture(wad,t)
+                output[t] = make_texture(wad,t,txd=txd)
         else:
             if (valid_texture(wad,t,txd)):
-                output[t] = make_texture(wad,t)
+                output[t] = make_texture(wad,t,txd=txd)
             
     return output
     
-def make_texture(wad,t,dim=None):
+def make_texture(wad,t,dim=None,txd=None):
     # return an Image of a texture (build from patches)
-    
+    if txd is None: 
+        txd = omg.txdef.Textures(wad.txdefs)
     if (dim is None):
     
         if t in cache.keys():
             return cache[t]
         
-        txd = omg.txdef.Textures(wad.txdefs)
+        
         output = Image.new("RGB",(txd[t].width,txd[t].height))
         for p in txd[t].patches:
             pimg = wad.patches[p.name.upper()].to_Image()
@@ -55,22 +56,25 @@ def make_texture(wad,t,dim=None):
         if t + str(dim) in cache.keys():
             return cache[t + str(dim)]
             
-        txd = omg.txdef.Textures(wad.txdefs)
-        output = Image.new("RGB",(txd[t].width,txd[t].height))
-        for p in txd[t].patches:
-            pimg = wad.patches[p.name.upper()].to_Image()
-            output.paste(pimg,(p.x,p.y))
+        
+        if t in cache.keys():
+            output = cache[t]
+        else:
+            output = Image.new("RGB",(txd[t].width,txd[t].height))
+            for p in txd[t].patches:
+                pimg = wad.patches[p.name.upper()].to_Image()
+                output.paste(pimg,(p.x,p.y))
+            cache[t] = output
             
-        cop = output.copy()
-        output = Image.new("RGB",dim)
+        cop = Image.new("RGB",dim)
         
         for i in range(dim[0]/txd[t].width):
             for j in range(dim[1]/txd[t].height):
-                output.paste(cop,(i * txd[t].width,j * txd[t].height))
+                cop.paste(output,(i * txd[t].width,j * txd[t].height))
             
-        cache[t + str(dim)] = output
+        cache[t + str(dim)] = cop
             
-        return output
+        return cop
     
 def valid_texture(wad,name,txd):
     # check if a texture is actually made from patches in the wad
@@ -93,10 +97,10 @@ def closest_match(img, wad):
             
             if img.size[0] != txdef[t].width or img.size[1] != txdef[t].height:
                 # resize image
-                ti = make_texture(wad,t, dim=img.size)
+                ti = make_texture(wad,t, txd=txdef, dim=img.size)
                 v = compare_img(img,ti)
             else :
-                ti = make_texture(wad,t)
+                ti = make_texture(wad,t, txd=txdef)
                 v = compare_img(img,ti)
         else:
             v = 0
@@ -176,6 +180,44 @@ def build_fake_textureset(texture_wad,names_wad,output_path,copypatches):
     
     # TODO: add a dummy patch
     
+    
+    
+    print("getting texture images")
+    nimg_list = get_wad_textures(nwad)
+    
+    owadtx = omg.txdef.Textures()
+    
+    print("finding matches/ building output wad")
+    
+    prg = 0.0
+    prgmax = len(nimg_list)
+    print "textures: "+str(prgmax)
+    
+    twadtxdef = omg.txdef.Textures(twad.txdefs)
+    
+    for name, t in nimg_list.iteritems():
+        prg += 1
+        
+        match = closest_match(t,twad)
+        
+        # this is a name of the matching texture
+        # add this to the owad, and create a texture
+        
+        if match not in owad.patches:
+            lmp = omg.Graphic()
+            lmp.from_Image(make_texture(twad,match,txd=twadtxdef))
+            owad.patches[match] = lmp
+        
+        owadtx[name] = omg.txdef.TextureDef()
+        owadtx[name].name = name
+        owadtx[name].patches.append(omg.txdef.PatchDef())
+        owadtx[name].patches[0].name = match
+        owadtx[name].width, owadtx[name].height = owad.patches[match].dimensions
+        
+        update_progress(prg / prgmax)
+    
+    owad.txdefs = owadtx.to_lumps()
+    print("\n")
     print("build flat images")
     
     tflats = get_flat_images(twad)
@@ -193,41 +235,7 @@ def build_fake_textureset(texture_wad,names_wad,output_path,copypatches):
         owad.flats[nf] = twad.flats[match].copy()
         update_progress(prg / prgmax)
     
-    print("\n")
     
-    print("getting texture images")
-    nimg_list = get_wad_textures(nwad)
-    
-    owadtx = omg.txdef.Textures()
-    
-    print("finding matches/ building output wad")
-    
-    prg = 0.0
-    prgmax = len(nimg_list)
-    print "textures: "+str(prgmax)
-    
-    for name, t in nimg_list.iteritems():
-        prg += 1
-        
-        match = closest_match(t,twad)
-        
-        # this is a name of the matching texture
-        # add this to the owad, and create a texture
-        
-        if match not in owad.patches:
-            lmp = omg.Graphic()
-            lmp.from_Image(make_texture(twad,match))
-            owad.patches[match] = lmp
-        
-        owadtx[name] = omg.txdef.TextureDef()
-        owadtx[name].name = name
-        owadtx[name].patches.append(omg.txdef.PatchDef())
-        owadtx[name].patches[0].name = match
-        owadtx[name].width, owadtx[name].height = owad.patches[match].dimensions
-        
-        update_progress(prg / prgmax)
-    
-    owad.txdefs = owadtx.to_lumps()
     
     owad.to_file(output_path)
     
