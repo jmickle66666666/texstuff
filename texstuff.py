@@ -32,21 +32,45 @@ def get_wad_textures(wad, ignore = None):
             
     return output
     
-def make_texture(wad,t):
+def make_texture(wad,t,dim=None):
     # return an Image of a texture (build from patches)
     
-    if t in cache.keys():
-        return cache[t]
+    if (dim is None):
     
-    txd = omg.txdef.Textures(wad.txdefs)
-    output = Image.new("RGB",(txd[t].width,txd[t].height))
-    for p in txd[t].patches:
-        pimg = wad.patches[p.name.upper()].to_Image()
-        output.paste(pimg,(p.x,p.y))
+        if t in cache.keys():
+            return cache[t]
         
-    cache[t] = output
+        txd = omg.txdef.Textures(wad.txdefs)
+        output = Image.new("RGB",(txd[t].width,txd[t].height))
+        for p in txd[t].patches:
+            pimg = wad.patches[p.name.upper()].to_Image()
+            output.paste(pimg,(p.x,p.y))
+            
+        cache[t] = output
+            
+        return output
         
-    return output
+    else:
+    
+        if t + str(dim) in cache.keys():
+            return cache[t + str(dim)]
+            
+        txd = omg.txdef.Textures(wad.txdefs)
+        output = Image.new("RGB",(txd[t].width,txd[t].height))
+        for p in txd[t].patches:
+            pimg = wad.patches[p.name.upper()].to_Image()
+            output.paste(pimg,(p.x,p.y))
+            
+        cop = output.copy()
+        output = Image.new("RGB",dim)
+        
+        for i in range(dim[0]/txd[t].width):
+            for j in range(dim[1]/txd[t].height):
+                output.paste(cop,(i * txd[t].width,j * txd[t].height))
+            
+        cache[t + str(dim)] = output
+            
+        return output
     
 def valid_texture(wad,name,txd):
     # check if a texture is actually made from patches in the wad
@@ -65,8 +89,12 @@ def closest_match(img, wad):
         if valid_texture(wad,t,txdef):
             # dimensions check
             
+            
+            
             if img.size[0] != txdef[t].width or img.size[1] != txdef[t].height:
-                v = 0
+                # resize image
+                ti = make_texture(wad,t, dim=img.size)
+                v = compare_img(img,ti)
             else :
                 ti = make_texture(wad,t)
                 v = compare_img(img,ti)
@@ -170,11 +198,11 @@ if __name__ == '__main__':
     output_path = "output.wad"
     if (len(sys.argv) > 3): 
         output_path = sys.argv[3]
-    copypatches = False
+    copypatches = True
     if (len(sys.argv) > 4): 
         if "-p" in sys.argv:
-            copypatches = True
-    build_fake_textureset(sys.argv[1],doom2_path,"output2.wad",copypatches)
+            copypatches = False
+    build_fake_textureset(sys.argv[1],doom2_path,output_path,copypatches)
     
     end = time.time()
     print "time elapsed: {}".format(end-starttime)
