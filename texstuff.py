@@ -107,6 +107,30 @@ def closest_match(img, wad):
             
     return m_tex
     
+def closest_flat_match(flat, flatList):
+    # find the closest matching flat in wad to flat
+    
+    m_flat = None
+    m_val = -1
+    
+    for name, f in flatList.iteritems():
+        v = compare_img(flat,f)
+        if v > m_val:
+            m_val = v
+            m_flat = name
+            
+    return m_flat
+    
+def get_flat_images(wad):
+    # get a dictionary of image renders of flats from a wad
+    
+    output = {}
+    
+    for f in wad.flats:
+        output[f] = wad.flats[f].to_Image()
+        
+    return output
+    
 def update_progress(progress):
     barLength = 10 # Modify this to change the length of the progress bar
     status = ""
@@ -150,6 +174,27 @@ def build_fake_textureset(texture_wad,names_wad,output_path,copypatches):
     twad = omg.WAD(texture_wad)
     owad = omg.WAD()
     
+    # TODO: add a dummy patch
+    
+    print("build flat images")
+    
+    tflats = get_flat_images(twad)
+    
+    print("workin the flats")
+    
+    prg = 0.0
+    prgmax = len(nwad.flats)
+    print "flats: "+str(prgmax)
+    
+    for nf in nwad.flats:
+        prg += 1
+        match = closest_flat_match(nwad.flats[nf].to_Image(),tflats)
+        
+        owad.flats[nf] = twad.flats[match].copy()
+        update_progress(prg / prgmax)
+    
+    print("\n")
+    
     print("getting texture images")
     nimg_list = get_wad_textures(nwad)
     
@@ -159,7 +204,7 @@ def build_fake_textureset(texture_wad,names_wad,output_path,copypatches):
     
     prg = 0.0
     prgmax = len(nimg_list)
-    print prgmax
+    print "textures: "+str(prgmax)
     
     for name, t in nimg_list.iteritems():
         prg += 1
@@ -169,18 +214,16 @@ def build_fake_textureset(texture_wad,names_wad,output_path,copypatches):
         # this is a name of the matching texture
         # add this to the owad, and create a texture
         
-        if copypatches is True:
-            if match not in owad.data:
-                lmp = omg.Graphic()
-                lmp.from_Image(make_texture(twad,match))
-                owad.data[match] = lmp
+        if match not in owad.patches:
+            lmp = omg.Graphic()
+            lmp.from_Image(make_texture(twad,match))
+            owad.patches[match] = lmp
         
         owadtx[name] = omg.txdef.TextureDef()
         owadtx[name].name = name
         owadtx[name].patches.append(omg.txdef.PatchDef())
         owadtx[name].patches[0].name = match
-        if copypatches is True:
-            owadtx[name].width, owadtx[name].height = owad.data[match].dimensions
+        owadtx[name].width, owadtx[name].height = owad.patches[match].dimensions
         
         update_progress(prg / prgmax)
     
@@ -199,9 +242,6 @@ if __name__ == '__main__':
     if (len(sys.argv) > 3): 
         output_path = sys.argv[3]
     copypatches = True
-    if (len(sys.argv) > 4): 
-        if "-p" in sys.argv:
-            copypatches = False
     build_fake_textureset(sys.argv[1],doom2_path,output_path,copypatches)
     
     end = time.time()
